@@ -9,32 +9,34 @@ import {importFromChromeTimeline, importFromChromeCPUProfile} from './import/chr
 import {Profile, Frame} from './profile'
 import {Flamechart} from './flamechart'
 import { FlamechartView } from './flamechart-view'
+import { CallGraphView } from './call-graph-view'
 import { FontFamily, FontSize, Colors } from './style'
 import { FrameColorGenerator } from './color'
 
-const enum SortOrder {
-  CHRONO,
-  LEFT_HEAVY
+const enum ViewMode {
+  CHRONO_FLAMECHART,
+  LEFT_HEAVY_FLAMECHART,
+  CALL_GRAPH
 }
 
 interface ApplicationState {
   profile: Profile | null
   flamechart: Flamechart | null
   sortedFlamechart: Flamechart | null
-  sortOrder: SortOrder
+  viewMode: ViewMode
 }
 
 interface ToolbarProps extends ApplicationState {
-  setSortOrder(order: SortOrder): void
+  setSortOrder(order: ViewMode): void
 }
 
 export class Toolbar extends ReloadableComponent<ToolbarProps, void> {
   setTimeOrder = () => {
-    this.props.setSortOrder(SortOrder.CHRONO)
+    this.props.setSortOrder(ViewMode.CHRONO_FLAMECHART)
   }
 
   setLeftHeavyOrder = () => {
-    this.props.setSortOrder(SortOrder.LEFT_HEAVY)
+    this.props.setSortOrder(ViewMode.LEFT_HEAVY_FLAMECHART)
   }
 
   render() {
@@ -54,10 +56,10 @@ export class Toolbar extends ReloadableComponent<ToolbarProps, void> {
     }
     return <div className={css(style.toolbar)}>
       <div className={css(style.toolbarLeft)}>
-        <div className={css(style.toolbarTab, this.props.sortOrder === SortOrder.CHRONO && style.toolbarTabActive)} onClick={this.setTimeOrder}>
+        <div className={css(style.toolbarTab, this.props.viewMode === ViewMode.CHRONO_FLAMECHART && style.toolbarTabActive)} onClick={this.setTimeOrder}>
           <span className={css(style.emoji)}>🕰</span>Time Order
         </div>
-        <div className={css(style.toolbarTab, this.props.sortOrder === SortOrder.LEFT_HEAVY && style.toolbarTabActive)} onClick={this.setLeftHeavyOrder}>
+        <div className={css(style.toolbarTab, this.props.viewMode === ViewMode.LEFT_HEAVY_FLAMECHART && style.toolbarTabActive)} onClick={this.setLeftHeavyOrder}>
           <span className={css(style.emoji)}>⬅️</span>Left Heavy
         </div>
         {help}
@@ -75,7 +77,7 @@ export class Application extends ReloadableComponent<{}, ApplicationState> {
       profile: null,
       flamechart: null,
       sortedFlamechart: null,
-      sortOrder: SortOrder.CHRONO
+      viewMode: ViewMode.CHRONO_FLAMECHART
     }
   }
 
@@ -146,11 +148,15 @@ export class Application extends ReloadableComponent<{}, ApplicationState> {
   onWindowKeyPress = (ev: KeyboardEvent) => {
     if (ev.key === '1') {
       this.setState({
-        sortOrder: SortOrder.CHRONO
+        viewMode: ViewMode.CHRONO_FLAMECHART
       })
     } else if (ev.key === '2') {
       this.setState({
-        sortOrder: SortOrder.LEFT_HEAVY
+        viewMode: ViewMode.LEFT_HEAVY_FLAMECHART
+      })
+    } else if (ev.key === '3') {
+      this.setState({
+        viewMode: ViewMode.CALL_GRAPH
       })
     }
   }
@@ -163,11 +169,14 @@ export class Application extends ReloadableComponent<{}, ApplicationState> {
     window.removeEventListener('keypress', this.onWindowKeyPress)
   }
 
-  flamechartView: FlamechartView | null
+  flamechartView: FlamechartView | null = null
   flamechartRef = (view: FlamechartView | null) => this.flamechartView = view
+  callgraphView: CallGraphView | null = null
+  callgraphRef = (view: CallGraphView | null) => this.callgraphView = view
   subcomponents() {
     return {
-      flamechart: this.flamechartView
+      flamechart: this.flamechartView,
+      callgraph: this.callgraphView
     }
   }
 
@@ -202,19 +211,38 @@ export class Application extends ReloadableComponent<{}, ApplicationState> {
     </div>
   }
 
-  setSortOrder = (sortOrder: SortOrder) => {
-    this.setState({ sortOrder })
+  setViewMode = (viewMode: ViewMode) => {
+    this.setState({ viewMode })
   }
 
   render() {
-    const {flamechart, sortedFlamechart, sortOrder} = this.state
-    const flamechartToView = sortOrder == SortOrder.CHRONO ? flamechart : sortedFlamechart
+    const { flamechart, sortedFlamechart, viewMode } = this.state
+    let contentView: JSX.Element | null = null
+
+    switch (viewMode) {
+      case ViewMode.CHRONO_FLAMECHART: {
+        if (flamechart) {
+          contentView = <FlamechartView ref={this.flamechartRef} flamechart={flamechart} />
+        }
+        break
+      }
+
+      case ViewMode.LEFT_HEAVY_FLAMECHART: {
+        if (sortedFlamechart) {
+          contentView = <FlamechartView ref={this.flamechartRef} flamechart={sortedFlamechart} />
+        }
+        break
+      }
+
+      case ViewMode.CALL_GRAPH: {
+        contentView = <CallGraphView ref={this.callgraphRef} />
+        break
+      }
+    }
 
     return <div onDrop={this.onDrop} onDragOver={this.onDragOver} className={css(style.root)}>
-      <Toolbar setSortOrder={this.setSortOrder} {...this.state} />
-      {flamechartToView ?
-        <FlamechartView ref={this.flamechartRef} flamechart={flamechartToView} /> :
-        this.renderLanding()}
+      <Toolbar setSortOrder={this.setViewMode} {...this.state} />
+      {contentView || this.renderLanding()}
     </div>
   }
 }

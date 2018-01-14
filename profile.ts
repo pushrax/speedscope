@@ -1,4 +1,4 @@
-import { lastOf } from './utils'
+import { lastOf, getOrInsert } from './utils'
 
 export interface FrameInfo {
   key: string | number
@@ -59,11 +59,6 @@ export class CallTreeNode extends HasWeights {
   constructor(readonly frame: Frame, readonly parent: CallTreeNode | null) {
     super()
   }
-}
-
-function getOrInsert<K, V>(map: Map<K, V>, k: K, v: V): V {
-  if (!map.has(k)) map.set(k, v)
-  return map.get(k)!
 }
 
 const rootFrame = new Frame({
@@ -220,7 +215,7 @@ export class Profile {
     let framesInStack = new Set<Frame>()
 
     for (let frameInfo of stack) {
-      const frame = getOrInsert(this.frames, frameInfo.key, new Frame(frameInfo))
+      const frame = getOrInsert(this.frames, frameInfo.key, () => new Frame(frameInfo))
       const last = useAppendOrder ? lastOf(node.children) : node.children.find(c => c.frame === frame)
       if (last && last.frame == frame) {
         node = last
